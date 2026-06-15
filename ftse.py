@@ -1,9 +1,19 @@
-import yfinance as yf
 import pandas as pd
+import yfinance as yf
+
 
 def get_ftse_data():
-    df = yf.download("^FTSE", period="5d", interval="15m")
-    return df
+    return yf.download("^FTSE", period="5d", interval="15m")
+
+
+def compute_rsi(series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
+
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
 
 def compute_signals(df):
     df = df.copy()
@@ -14,41 +24,21 @@ def compute_signals(df):
 
     latest = df.iloc[-1]
 
-ma20 = float(latest["ma20"])
-ma50 = float(latest["ma50"])
-rsi = float(latest["rsi"])
+    ma20 = float(latest["ma20"])
+    ma50 = float(latest["ma50"])
+    rsi = float(latest["rsi"])
 
-signal = "HOLD"
+    signal = "HOLD"
 
-if ma20 > ma50 and rsi < 70:
-    signal = "BUY"
-elif ma20 < ma50:
-    signal = "SELL"
-
-return {
-    "price": float(latest["Close"]),
-    "rsi": rsi,
-    "ma20": ma20,
-    "ma50": ma50,
-    "signal": signal
-}
+    if ma20 > ma50 and rsi < 70:
         signal = "BUY"
-    elif latest["ma20"] < latest["ma50"]:
+    elif ma20 < ma50:
         signal = "SELL"
 
     return {
         "price": float(latest["Close"]),
-        "rsi": float(latest["rsi"]),
-        "ma20": float(latest["ma20"]),
-        "ma50": float(latest["ma50"]),
+        "rsi": rsi,
+        "ma20": ma20,
+        "ma50": ma50,
         "signal": signal
     }
-
-
-def compute_rsi(series, period=14):
-    delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
-
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
