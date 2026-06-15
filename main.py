@@ -1,12 +1,19 @@
 import os
 import requests
-from ftse import get_ftse_data, compute_signals
 from datetime import datetime
+from ftse import get_ftse_data, compute_signals
 
-data = get_ftse_data()
-result = compute_signals(data)
 
-msg = f"""
+def send_telegram(message):
+    bot_token = os.environ["BOT_TOKEN"]
+    chat_id = os.environ["CHAT_ID"]
+
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    requests.get(url, params={"chat_id": chat_id, "text": message})
+
+
+def format_message(result):
+    return f"""
 📊 FTSE AI AGENT
 
 ⏰ Time: {datetime.now()}
@@ -19,13 +26,12 @@ msg = f"""
 🚦 Signal: {result['signal']}
 """
 
-print(msg)
 
-# Telegram
-bot_token = os.environ["BOT_TOKEN"]
-chat_id = os.environ["CHAT_ID"]
+if __name__ == "__main__":
+    df = get_ftse_data()
+    result = compute_signals(df)
 
-requests.get(
-    f"https://api.telegram.org/bot{bot_token}/sendMessage",
-    params={"chat_id": chat_id, "text": msg}
-)
+    msg = format_message(result)
+    print(msg)
+
+    send_telegram(msg)
