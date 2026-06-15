@@ -14,9 +14,24 @@ def compute_signals(df):
 
     latest = df.iloc[-1]
 
-    signal = "HOLD"
+ma20 = float(latest["ma20"])
+ma50 = float(latest["ma50"])
+rsi = float(latest["rsi"])
 
-    if latest["ma20"] > latest["ma50"] and latest["rsi"] < 70:
+signal = "HOLD"
+
+if ma20 > ma50 and rsi < 70:
+    signal = "BUY"
+elif ma20 < ma50:
+    signal = "SELL"
+
+return {
+    "price": float(latest["Close"]),
+    "rsi": rsi,
+    "ma20": ma20,
+    "ma50": ma50,
+    "signal": signal
+}
         signal = "BUY"
     elif latest["ma20"] < latest["ma50"]:
         signal = "SELL"
