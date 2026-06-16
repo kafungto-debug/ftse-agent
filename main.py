@@ -1,37 +1,69 @@
-import os
-import requests
+# main.py
+
+from news_sentiment_scoring import scan_market
+import json
 from datetime import datetime
-from ftse import get_ftse_data, compute_signals
 
 
-def send_telegram(message):
-    bot_token = os.environ["BOT_TOKEN"]
-    chat_id = os.environ["CHAT_ID"]
+# =========================
+# CONFIG
+# =========================
 
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    requests.get(url, params={"chat_id": chat_id, "text": message})
+TICKERS = [
+    "BP.L",
+    "HSBA.L",
+    "BARC.L",
+    "LLOY.L",
+    "SHEL.L",
+    "RDSA.L",
+    "RIO.L",
+    "GSK.L"
+]
 
 
-def format_message(result):
-    return f"""
-📊 FTSE AI AGENT
+# =========================
+# RUN ENGINE
+# =========================
 
-⏰ Time: {datetime.now()}
+def run_scan():
+    print("\n==============================")
+    print(" FTSE AI AGENT RUN STARTED")
+    print(" Time:", datetime.now())
+    print("==============================\n")
 
-💷 Price: {result['price']:.2f}
-📈 RSI: {result['rsi']:.2f}
-📊 MA20: {result['ma20']:.2f}
-📊 MA50: {result['ma50']:.2f}
+    results = scan_market(TICKERS)
 
-🚦 Signal: {result['signal']}
-"""
+    if not results:
+        print("No results found.")
+        return
 
+    # sort already done inside module, but double safe
+    top = results[:3]
+
+    print("\n🔥 TOP 3 POTENTIAL BUYS\n")
+
+    for i, r in enumerate(top, 1):
+        print(f"\n#{i} {r['ticker']}")
+        print(f"Score: {round(r['score'], 4)}")
+        print(f"Sentiment: {round(r['sentiment'], 4)}")
+        print(f"Momentum: {round(r['momentum'], 4)}")
+
+        print("\n📰 Top News:")
+        for n in r["top_news"]:
+            print("-", n["title"])
+
+    # save output for GitHub Actions artifact / logs
+    with open("latest_results.json", "w") as f:
+        json.dump(results, f, indent=2)
+
+    print("\n==============================")
+    print("DONE - results saved")
+    print("==============================")
+
+
+# =========================
+# ENTRY POINT
+# =========================
 
 if __name__ == "__main__":
-    df = get_ftse_data()
-    result = compute_signals(df)
-
-    msg = format_message(result)
-    print(msg)
-
-    send_telegram(msg)
+    run_scan()
