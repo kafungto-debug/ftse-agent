@@ -1,11 +1,10 @@
-# news_sentiment_scoring.py
-
 import feedparser
 import pandas as pd
 import requests
 from nltk.sentiment import SentimentIntensityAnalyzer
 import nltk
 import yfinance as yf
+import math
 
 nltk.download('vader_lexicon')
 
@@ -13,7 +12,7 @@ sia = SentimentIntensityAnalyzer()
 
 
 # =========================
-# 1. NEWS SOURCES
+# NEWS SOURCES
 # =========================
 
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search?q={query}+stock&hl=en-GB&gl=GB&ceid=GB:en"
@@ -25,11 +24,14 @@ def fetch_rss(url):
     feed = feedparser.parse(url)
     articles = []
 
+    if not feed or not hasattr(feed, "entries"):
+        return []
+
     for entry in feed.entries[:20]:
         articles.append({
-            "title": entry.title,
+            "title": getattr(entry, "title", ""),
             "summary": getattr(entry, "summary", ""),
-            "link": entry.link
+            "link": getattr(entry, "link", "")
         })
 
     return articles
@@ -45,24 +47,27 @@ def fetch_motley_fool():
 
 
 # =========================
-# 2. SENTIMENT ANALYSIS
+# SENTIMENT
 # =========================
 
 def get_sentiment(text):
+    if not text:
+        return 0.0
+
     score = sia.polarity_scores(text)
-    return score["compound"]  # -1 to +1
+    return float(score.get("compound", 0.0))
 
 
 def analyze_articles(articles):
     results = []
 
     for a in articles:
-        text = a["title"] + " " + a["summary"]
+        text = f"{a.get('title','')} {a.get('summary','')}"
         sentiment = get_sentiment(text)
 
         results.append({
-            "title": a["title"],
-            "link": a["link"],
+            "title": a.get("title", ""),
+            "link": a.get("link", ""),
             "sentiment": sentiment
         })
 
@@ -70,40 +75,55 @@ def analyze_articles(articles):
 
 
 # =========================
-# 3. STOCK DATA
+# PRICE MOMENTUM (FIXED)
 # =========================
 
 def get_price_momentum(ticker):
-    stock = yf.Ticker(ticker)
-    hist = stock.history(period="5d")
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="5d")
 
-    if len(hist) < 2:
-        return 0
+        if hist is None or hist.empty:
+            return 0.0
 
-    return (hist["Close"][-1] - hist["Close"][0]) / hist["Close"][0]
+        close_prices = hist["Close"].dropna()
+
+        if len(close_prices) < 2:
+            return 0.0
+
+        start = float(close_prices.iloc[0])
+        end = float(close_prices.iloc[-1])
+
+        if start == 0:
+            return 0.0
+
+        return float((end - start) / start)
+
+    except Exception:
+        return 0.0
 
 
 # =========================
-# 4. SCORING ENGINE
+# SCORING
 # =========================
 
 def compute_score(sentiment_avg, momentum):
-    """
-    Weighted scoring:
-    sentiment 60%
-    momentum 40%
-    """
-    return (sentiment_avg * 0.6) + (momentum * 0.4)
+    if sentiment_avg is None or math.isnan(sentiment_avg):
+        sentiment_avg = 0.0
+
+    if momentum is None or math.isnan(momentum):
+        momentum = 0.0
+
+    return float((sentiment_avg * 0.6) + (momentum * 0.4))
 
 
 # =========================
-# 5. MAIN PIPELINE
+# MAIN ANALYSIS
 # =========================
 
 def analyze_ticker(ticker, query):
-    print(f"\nAnalyzing {ticker}...")
+    print(f"Analyzing {ticker}")
 
-    # news
     google_news = fetch_google_news(query)
     fool_news = fetch_motley_fool()
 
@@ -111,8 +131,14 @@ def analyze_ticker(ticker, query):
 
     analyzed = analyze_articles(all_news)
 
-    if len(analyzed) == 0:
-        return None
+    if not analyzed:
+        return {
+            "ticker": ticker,
+            "sentiment": 0.0,
+            "momentum": 0.0,
+            "score": 0.0,
+            "top_news": []
+        }
 
     sentiment_avg = sum(a["sentiment"] for a in analyzed) / len(analyzed)
 
@@ -120,17 +146,19 @@ def analyze_ticker(ticker, query):
 
     score = compute_score(sentiment_avg, momentum)
 
+    top_news = sorted(analyzed, key=lambda x: x["sentiment"], reverse=True)[:3]
+
     return {
         "ticker": ticker,
-        "sentiment": sentiment_avg,
-        "momentum": momentum,
-        "score": score,
-        "top_news": sorted(analyzed, key=lambda x: x["sentiment"], reverse=True)[:3]
+        "sentiment": float(sentiment_avg),
+        "momentum": float(momentum),
+        "score": float(score),
+        "top_news": top_news
     }
 
 
 # =========================
-# 6. MULTI-STOCK SCANNER
+# MARKET SCAN
 # =========================
 
 def scan_market(tickers):
@@ -138,17 +166,6 @@ def scan_market(tickers):
 
     for t in tickers:
         r = analyze_ticker(t, t)
-        if r:
-            results.append(r)
+        results.append(r)
 
     return sorted(results, key=lambda x: x["score"], reverse=True)
-
-
-if __name__ == "__main__":
-    ftse_stocks = ["BP.L", "HSBA.L", "BARC.L", "LLOY.L", "SHEL.L"]
-
-    results = scan_market(ftse_stocks)
-
-    for r in results[:3]:
-        print("\n===================")
-        print(r)
