@@ -15,6 +15,8 @@ def send_telegram_message(message: str):
 
     try:
         r = requests.post(url, data=payload)
+        print("Telegram status:", r.status_code)
+        print("Telegram response:", r.text)
         return r.json()
     except Exception as e:
         print("Telegram error:", e)
