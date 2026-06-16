@@ -1,3 +1,5 @@
-yfinance
+feedparser
 pandas
+nltk
 requests
+yfinance
