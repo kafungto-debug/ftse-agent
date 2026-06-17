@@ -1,7 +1,7 @@
 feedparser
 pandas
-nltk
 requests
+nltk
 yfinance
 lxml
 html5lib
