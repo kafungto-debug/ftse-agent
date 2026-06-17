@@ -5,6 +5,7 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 import nltk
 import yfinance as yf
 import math
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 nltk.download('vader_lexicon')
 
@@ -81,7 +82,10 @@ def analyze_articles(articles):
 def get_price_momentum(ticker):
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period="5d")
+        hist = stock.history(
+    period="5d",
+    auto_adjust=False
+)
 
         if hist is None or hist.empty:
             return 0.0
@@ -121,17 +125,47 @@ def compute_score(sentiment_avg, momentum):
 # MAIN ANALYSIS
 # =========================
 
-def analyze_ticker(ticker, query):
+def analyze_ticker(ticker, query, fool_news):
     print(f"Analyzing {ticker}")
 
-    google_news = fetch_google_news(query)
-    fool_news = fetch_motley_fool()
+    try:
+        google_news = fetch_google_news(query)
+        all_news = google_news + fool_news
 
-    all_news = google_news + fool_news
+        analyzed = analyze_articles(all_news)
 
-    analyzed = analyze_articles(all_news)
+        sentiment_avg = 0.0
 
-    if not analyzed:
+        if analyzed:
+            sentiment_avg = (
+                sum(a["sentiment"] for a in analyzed)
+                / len(analyzed)
+            )
+
+        momentum = get_price_momentum(ticker)
+
+        score = compute_score(
+            sentiment_avg,
+            momentum
+        )
+
+        top_news = sorted(
+            analyzed,
+            key=lambda x: x["sentiment"],
+            reverse=True
+        )[:3]
+
+        return {
+            "ticker": ticker,
+            "sentiment": float(sentiment_avg),
+            "momentum": float(momentum),
+            "score": float(score),
+            "top_news": top_news
+        }
+
+    except Exception as e:
+        print(f"{ticker} failed: {e}")
+
         return {
             "ticker": ticker,
             "sentiment": 0.0,
@@ -139,22 +173,6 @@ def analyze_ticker(ticker, query):
             "score": 0.0,
             "top_news": []
         }
-
-    sentiment_avg = sum(a["sentiment"] for a in analyzed) / len(analyzed)
-
-    momentum = get_price_momentum(ticker)
-
-    score = compute_score(sentiment_avg, momentum)
-
-    top_news = sorted(analyzed, key=lambda x: x["sentiment"], reverse=True)[:3]
-
-    return {
-        "ticker": ticker,
-        "sentiment": float(sentiment_avg),
-        "momentum": float(momentum),
-        "score": float(score),
-        "top_news": top_news
-    }
 
 
 # =========================
@@ -164,8 +182,48 @@ def analyze_ticker(ticker, query):
 def scan_market(tickers):
     results = []
 
-    for t in tickers:
-        r = analyze_ticker(t, t)
-        results.append(r)
+    print("Downloading Motley Fool RSS once...")
+    fool_news = fetch_motley_fool()
 
-    return sorted(results, key=lambda x: x["score"], reverse=True)
+    workers = min(12, len(tickers))
+
+    with ThreadPoolExecutor(
+        max_workers=workers
+    ) as executor:
+
+        futures = {
+            executor.submit(
+                analyze_ticker,
+                t,
+                t,
+                fool_news
+            ): t
+            for t in tickers
+        }
+
+        for future in as_completed(futures):
+            ticker = futures[future]
+
+            try:
+                r = future.result()
+
+                if r:
+                    results.append(r)
+
+            except Exception as e:
+                print(f"{ticker} error: {e}")
+
+    results = [
+        r for r in results
+        if (
+            r["score"] != 0
+            or r["sentiment"] != 0
+            or r["momentum"] != 0
+        )
+    ]
+
+    return sorted(
+        results,
+        key=lambda x: x["score"],
+        reverse=True
+    )
