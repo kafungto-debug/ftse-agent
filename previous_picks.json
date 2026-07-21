@@ -168,5 +168,10 @@
         "RIO.L",
         "HSBA.L",
         "LLOY.L"
+    ],
+    "2026-07-21": [
+        "HSBA.L",
+        "RIO.L",
+        "BARC.L"
     ]
 }
