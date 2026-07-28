@@ -203,5 +203,10 @@
         "RIO.L",
         "HSBA.L",
         "BARC.L"
+    ],
+    "2026-07-28": [
+        "HSBA.L",
+        "GSK.L",
+        "BARC.L"
     ]
 }
