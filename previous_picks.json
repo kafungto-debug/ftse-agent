@@ -738,5 +738,10 @@
         "BARC.L",
         "SHEL.L",
         "HSBA.L"
+    ],
+    "2026-11-12": [
+        "SHEL.L",
+        "BARC.L",
+        "RIO.L"
     ]
 }
